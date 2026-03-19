@@ -325,7 +325,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
       if(json.status === 'ok' && json.data && json.data.length > 0){
         var count = 0;
         json.data.forEach(function(item){
-          var si = S.findIndex(function(s){ return s.c === item.code; });
+          var si = S.findIndex(function(s){ return s.n === item.name && s.c === item.code; });
           if(si >= 0 && item.hrId){
             saveHr(si, item.hrId);
             count++;
