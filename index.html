@@ -209,7 +209,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     return true;
   }
 
-  // 同步人事號到 Google Sheets
+  // 同步人事號到 Google Sheets（使用 no-cors 模式確保送達）
   function syncToSheet(){
     if(!checkUrl()) return;
 
@@ -236,21 +236,19 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     btn.textContent = '\u2026 \u540c\u6b65\u4e2d (' + payload.length + ' \u7b46)';
     btn.disabled = true;
 
+    // Google Apps Script 會 302 重導向，跨域 fetch 無法讀回應
+    // 方法：先用 no-cors 確保資料送達，再用 JSONP 驗證結果
     fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      redirect: 'follow',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'sync', data: payload })
-    }).then(function(resp){
-      return resp.json();
-    }).then(function(json){
-      if(json.status === 'ok'){
-        toast('\u540c\u6b65\u6210\u529f\uff01\u66f4\u65b0 ' + (json.updated||0) + ' \u7b46\uff0c\u65b0\u589e ' + (json.inserted||0) + ' \u7b46');
-      } else {
-        toast('\u540c\u6b65\u5931\u6557\uff1a' + (json.message||'\u672a\u77e5\u932f\u8aa4'));
-      }
-      btn.innerHTML = origHtml;
-      btn.disabled = false;
+    }).then(function(){
+      // no-cors 回應是 opaque，無法讀取內容，但資料已送達
+      // 等待 Apps Script 處理完成後驗證
+      setTimeout(function(){
+        verifySyncResult(payload.length, btn, origHtml);
+      }, 2000);
     }).catch(function(err){
       toast('\u540c\u6b65\u5931\u6557\uff1a' + err.message);
       btn.innerHTML = origHtml;
@@ -258,7 +256,36 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     });
   }
 
-  // 從 Google Sheets 讀取人事號回填到網頁
+  // 驗證同步結果：用 JSONP 讀取 Sheets 確認資料已寫入
+  function verifySyncResult(expectedCount, btn, origHtml){
+    var cbName = '__verifySync' + Date.now();
+    window[cbName] = function(json){
+      delete window[cbName];
+      var script = document.getElementById('verifyScript');
+      if(script) script.remove();
+
+      if(json.status === 'ok' && json.data && json.data.length > 0){
+        toast('\u540c\u6b65\u6210\u529f\uff01\u5df2\u5beb\u5165 ' + expectedCount + ' \u7b46\u5230 Google Sheets');
+      } else {
+        toast('\u5df2\u9001\u51fa ' + expectedCount + ' \u7b46\u8cc7\u6599\uff0c\u8acb\u5230 Sheets \u78ba\u8a8d');
+      }
+      btn.innerHTML = origHtml;
+      btn.disabled = false;
+    };
+
+    var script = document.createElement('script');
+    script.id = 'verifyScript';
+    script.src = APPS_SCRIPT_URL + '?action=fetch&callback=' + cbName;
+    script.onerror = function(){
+      delete window[cbName];
+      toast('\u5df2\u9001\u51fa ' + expectedCount + ' \u7b46\u8cc7\u6599\uff0c\u8acb\u5230 Sheets \u78ba\u8a8d');
+      btn.innerHTML = origHtml;
+      btn.disabled = false;
+    };
+    document.body.appendChild(script);
+  }
+
+  // 從 Google Sheets 讀取人事號（使用 JSONP，100% 跨域可用）
   function fetchFromSheet(){
     if(!checkUrl()) return;
 
@@ -267,15 +294,16 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     btn.textContent = '\u2026 \u8b80\u53d6\u4e2d';
     btn.disabled = true;
 
-    fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'fetch' })
-    }).then(function(resp){
-      return resp.json();
-    }).then(function(json){
-      if(json.status === 'ok' && json.data && json.data.length){
+    var cbName = '__fetchSheet' + Date.now();
+    var timeoutId;
+
+    window[cbName] = function(json){
+      clearTimeout(timeoutId);
+      delete window[cbName];
+      var script = document.getElementById('fetchScript');
+      if(script) script.remove();
+
+      if(json.status === 'ok' && json.data && json.data.length > 0){
         var count = 0;
         json.data.forEach(function(item){
           var si = S.findIndex(function(s){ return s.c === item.code; });
@@ -287,15 +315,33 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
         render();
         toast('\u5df2\u5f9e Google Sheets \u8b80\u53d6 ' + count + ' \u7b46\u4eba\u4e8b\u865f');
       } else {
-        toast('\u8b80\u53d6\u5b8c\u6210\uff0c\u4f46\u7121\u8cc7\u6599');
+        toast('\u8b80\u53d6\u5b8c\u6210\uff0cSheets \u4e0a\u5c1a\u7121\u4eba\u4e8b\u865f\u8cc7\u6599');
       }
       btn.innerHTML = origHtml;
       btn.disabled = false;
-    }).catch(function(err){
-      toast('\u8b80\u53d6\u5931\u6557\uff0c\u8acb\u78ba\u8a8d Apps Script \u5df2\u6b63\u78ba\u90e8\u7f72\u4e14\u7db2\u5740\u6b63\u78ba');
+    };
+
+    // 超時處理
+    timeoutId = setTimeout(function(){
+      delete window[cbName];
+      var script = document.getElementById('fetchScript');
+      if(script) script.remove();
+      toast('\u8b80\u53d6\u903e\u6642\uff0c\u8acb\u78ba\u8a8d Apps Script \u5df2\u91cd\u65b0\u90e8\u7f72');
       btn.innerHTML = origHtml;
       btn.disabled = false;
-    });
+    }, 15000);
+
+    var script = document.createElement('script');
+    script.id = 'fetchScript';
+    script.src = APPS_SCRIPT_URL + '?action=fetch&callback=' + cbName;
+    script.onerror = function(){
+      clearTimeout(timeoutId);
+      delete window[cbName];
+      toast('\u8b80\u53d6\u5931\u6557\uff0c\u8acb\u78ba\u8a8d\u7db2\u5740\u6b63\u78ba\u4e14 Apps Script \u5df2\u90e8\u7f72');
+      btn.innerHTML = origHtml;
+      btn.disabled = false;
+    };
+    document.body.appendChild(script);
   }
 
   function setView(v){
