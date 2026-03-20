@@ -429,10 +429,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
     return ranges.map(function(r){
       if(r[0] === r[1]) return WL[r[0]];
-      // Extract start date from first week label, end date from last week label
-      var startLabel = WL[r[0]];
-      var endLabel = WL[r[1]];
-      return startLabel.split('-')[0] + ' ~ ' + endLabel;
+      return WL[r[0]] + ' ~ ' + WL[r[1]];
     });
   }
 
