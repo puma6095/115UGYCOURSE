@@ -480,12 +480,24 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   function getStudentPeriod(si){
     var idxs = getStudentAllWeekIdxs(si);
     if(idxs.length === 0) return '';
-    var first = WL[idxs[0]];          // e.g. "115/5/4-5/8"
-    var last  = WL[idxs[idxs.length-1]]; // e.g. "115/5/25-5/29"
-    var startDate = first.split('-')[0]; // "115/5/4"
-    var endDate   = last.split('-').pop(); // "5/29"
+    var first = WL[idxs[0]];
+    var last  = WL[idxs[idxs.length-1]];
+    var startDate = first.split('-')[0];
+    var endDate   = last.split('-').pop();
     if(first === last) return first;
     return startDate + '-' + endDate;
+  }
+
+  // Get a student's compact period in a SPECIFIC dept: e.g. "115/5/4~5/29"
+  function getStudentDeptPeriod(si, dept){
+    var idxs = getStudentDeptWeekIdxs(si, dept);
+    if(idxs.length === 0) return '';
+    var first = WL[idxs[0]];
+    var last  = WL[idxs[idxs.length-1]];
+    var startDate = first.split('-')[0];
+    var endDate   = last.split('-').pop();
+    if(first === last) return first;
+    return startDate + '~' + endDate;
   }
 
   // Compress consecutive week indices into readable range strings
@@ -692,11 +704,11 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
       h += '<div class="dept-grid" style="'+(showTime?'grid-template-columns:1fr':'')+'">';
       fks.forEach(function(dk){
         var ids = filtered[dk];
-        // Sort students by their earliest overall week (chronological)
+        // Sort students by their earliest week in this dept (chronological)
         if(showTime){
           ids = ids.slice().sort(function(a, b){
-            var aIdxs = getStudentAllWeekIdxs(a);
-            var bIdxs = getStudentAllWeekIdxs(b);
+            var aIdxs = getStudentDeptWeekIdxs(a, dk);
+            var bIdxs = getStudentDeptWeekIdxs(b, dk);
             var aMin = aIdxs.length ? aIdxs[0] : 9999;
             var bMin = bIdxs.length ? bIdxs[0] : 9999;
             return aMin - bMin;
@@ -724,7 +736,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
           }
           h += '<td><span class="grade-tag '+gc(st.g)+'">'+escHtml(displayGrade(st.g))+'</span></td>';
           if(showTime){
-            var period = getStudentPeriod(si);
+            var period = getStudentDeptPeriod(si, dk);
             h += '<td><span class="time-tag">'+escHtml(period)+'</span></td>';
           }
           h += '</tr>';
