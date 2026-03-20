@@ -89,9 +89,9 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 <div class="header">
   <div class="header-left">
     <h1>115 學年度 實習醫學生 COURSE 報到總覽</h1>
-    <div class="sub">各科部每週學員報到人數一覽 — 共 222 位學員 / 54 週 / 36 個科部</div>
+    <div class="sub" id="headerSub">各科部每週學員報到人數一覽 — 共 222 位學員 / 54 週 / 36 個科部</div>
   </div>
-  <div class="header-actions">
+  <div class="header-actions" id="headerActions">
     <button id="btnSync" style="background:rgba(52,211,153,.25);border-color:rgba(52,211,153,.7)">&#9729; 同步到 Google Sheets</button>
     <button id="btnFetchSheet">&#128229; 從 Sheets 讀取</button>
     <button id="btnExport">&#128190; 匯出 CSV</button>
@@ -131,6 +131,28 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 </script>
 <script>
 (function(){
+  // ====== 模式偵測 ======
+  // 網址加 ?mode=admin 為管理模式（人事室），否則為查閱模式（科部助理）
+  var params = new URLSearchParams(window.location.search);
+  var IS_ADMIN = (params.get('mode') === 'admin');
+
+  // 隱藏管理功能按鈕（查閱模式）
+  if(!IS_ADMIN){
+    var btns = ['btnSync','btnFetchSheet','btnImport','btnSettings'];
+    btns.forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.style.display = 'none';
+    });
+  }
+
+  // 更新標題列顯示角色
+  var subEl = document.getElementById('headerSub');
+  if(IS_ADMIN){
+    subEl.innerHTML = '<span style="background:#fbbf24;color:#78350f;padding:2px 10px;border-radius:8px;font-weight:600;font-size:12px;margin-right:6px;">\u4eba\u4e8b\u5ba4\u7ba1\u7406\u6a21\u5f0f</span> ' + subEl.textContent;
+  } else {
+    subEl.innerHTML = '<span style="background:rgba(255,255,255,.2);padding:2px 10px;border-radius:8px;font-weight:500;font-size:12px;margin-right:6px;">\u79d1\u90e8\u67e5\u95b1\u6a21\u5f0f</span> ' + subEl.textContent;
+  }
+
   var DATA = JSON.parse(document.getElementById('dataScript').textContent);
   var S = DATA.students;
   var W = DATA.weeks;
@@ -139,8 +161,10 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
   var HR_KEY = 'hr_ids_115';
   var hrStore = {};
-  try { hrStore = JSON.parse(localStorage.getItem(HR_KEY) || '{}'); } catch(e) {}
-  Object.keys(hrStore).forEach(function(k){ var i = +k; if(S[i]) S[i].h = hrStore[k]; });
+  if(IS_ADMIN){
+    try { hrStore = JSON.parse(localStorage.getItem(HR_KEY) || '{}'); } catch(e) {}
+    Object.keys(hrStore).forEach(function(k){ var i = +k; if(S[i]) S[i].h = hrStore[k]; });
+  }
 
   var view = 'card', wIdx = -1, deptF = '', search = '';
 
@@ -510,7 +534,15 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
           h += '<td class="stu-name">'+escHtml(st.n)+'</td>';
           h += '<td>'+escHtml(st.s)+'</td>';
           h += '<td class="stu-code">'+escHtml(st.c)+'</td>';
-          h += '<td><input class="hr-input'+filledCls+'" type="text" value="'+escHtml(st.h)+'" placeholder="\u5f85\u586b\u5beb" data-si="'+si+'"></td>';
+          if(IS_ADMIN){
+            h += '<td><input class="hr-input'+filledCls+'" type="text" value="'+escHtml(st.h)+'" placeholder="\u5f85\u586b\u5beb" data-si="'+si+'"></td>';
+          } else {
+            if(st.h){
+              h += '<td><span class="stu-code" style="color:var(--green)">'+escHtml(st.h)+'</span></td>';
+            } else {
+              h += '<td><span style="color:var(--text3);font-size:12px">\u2014</span></td>';
+            }
+          }
           h += '<td><span class="grade-tag '+gc(st.g)+'">'+escHtml(displayGrade(st.g))+'</span></td>';
           if(showTime){
             var weekIdxs = getStudentDeptWeekIdxs(si, dk);
@@ -529,14 +561,16 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     }
     el.innerHTML = h;
 
-    el.querySelectorAll('.hr-input').forEach(function(inp){
-      inp.addEventListener('change', function(){
-        var si = +this.getAttribute('data-si');
-        saveHr(si, this.value);
-        this.className = 'hr-input' + (this.value ? ' filled' : '');
-        toast('\u5df2\u5132\u5b58 ' + S[si].n + ' \u7684\u4eba\u4e8b\u865f');
+    if(IS_ADMIN){
+      el.querySelectorAll('.hr-input').forEach(function(inp){
+        inp.addEventListener('change', function(){
+          var si = +this.getAttribute('data-si');
+          saveHr(si, this.value);
+          this.className = 'hr-input' + (this.value ? ' filled' : '');
+          toast('\u5df2\u5132\u5b58 ' + S[si].n + ' \u7684\u4eba\u4e8b\u865f');
+        });
       });
-    });
+    }
   }
 
   function renderTable(el){
@@ -616,6 +650,23 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   }
 
   render();
+
+  // 查閱模式：自動從 Google Sheets 讀取最新人事號
+  if(!IS_ADMIN && APPS_SCRIPT_URL){
+    jsonpCall('fetch', function(json){
+      if(json.status === 'ok' && json.data && json.data.length > 0){
+        var count = 0;
+        json.data.forEach(function(item){
+          var si = S.findIndex(function(s){ return s.r === item.row && s.c === item.code; });
+          if(si >= 0 && item.hrId){
+            S[si].h = item.hrId;
+            count++;
+          }
+        });
+        if(count > 0) render();
+      }
+    }, function(){});
+  }
 })();
 </script>
 </body>
