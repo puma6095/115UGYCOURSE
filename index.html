@@ -116,16 +116,17 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   </div>
 </div>
 <div class="controls">
-  <div class="filter-group"><label>選擇週次</label><select id="weekSelect"></select></div>
-  <div class="filter-group"><label>篩選科部</label><select id="deptFilter"><option value="">全部科部</option></select></div>
+  <div class="filter-group"><label id="weekLabel">選擇週次</label><select id="weekSelect"></select></div>
+  <div class="filter-group" id="deptFilterGroup"><label>篩選科部</label><select id="deptFilter"><option value="">全部科部</option></select></div>
   <div class="filter-group"><label>搜尋</label><input type="text" id="searchInput" placeholder="姓名、學校或簡碼…"></div>
   <div class="filter-group" id="filterUnfilledGroup" style="display:none">
-    <label style="cursor:pointer;display:flex;align-items:center;gap:5px">
-      <input type="checkbox" id="chkUnfilled" checked style="width:16px;height:16px;cursor:pointer;accent-color:#2563eb">
-      <span>只顯示待填寫</span>
-    </label>
+    <label>填寫狀態</label>
+    <select id="selStatus">
+      <option value="unfilled">待填寫</option>
+      <option value="filled">已填寫</option>
+      <option value="all">全部</option>
+    </select>
   </div>
-  <div class="filter-group"><label>搜尋</label><input type="text" id="searchInput" placeholder="姓名、學校或簡碼…"></div>
   <div class="view-toggle">
     <button id="btnCard" class="active">卡片檢視</button>
     <button id="btnTable">總表檢視</button>
@@ -147,6 +148,15 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   if(!IS_ADMIN){
     var btns = ['btnSync','btnFetchSheet','btnImport','btnSettings'];
     btns.forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.style.display = 'none';
+    });
+  }
+
+  // 管理模式：隱藏科部篩選與總表切換（人資部不需要）
+  if(IS_ADMIN){
+    var hiddenEls = ['deptFilterGroup','btnTable'];
+    hiddenEls.forEach(function(id){
       var el = document.getElementById(id);
       if(el) el.style.display = 'none';
     });
@@ -175,13 +185,19 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
   var view = 'card', wIdx = -1, deptF = '', search = '';
   var onlyUnfilled = IS_ADMIN; // admin default: only show unfilled
+  var statusFilter = 'unfilled'; // unfilled | filled | all
 
-  // Show unfilled toggle only in admin mode
+  // Show status filter only in admin mode; change week label
   if(IS_ADMIN){
     document.getElementById('filterUnfilledGroup').style.display = '';
+    document.getElementById('weekLabel').textContent = '\u5be6\u7fd2\u671f\u9593';
   }
-  var chkUnfilled = document.getElementById('chkUnfilled');
-  chkUnfilled.addEventListener('change', function(){ onlyUnfilled = this.checked; render(); });
+  var selStatus = document.getElementById('selStatus');
+  selStatus.addEventListener('change', function(){
+    statusFilter = this.value;
+    onlyUnfilled = (statusFilter === 'unfilled');
+    render();
+  });
 
   var weekSel = document.getElementById('weekSelect');
   var oAll = document.createElement('option');
@@ -459,6 +475,19 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     return entries;
   }
 
+  // Get a student's compact period string: e.g. "115/5/4-5/29"
+  // = first week start date + last week end date
+  function getStudentPeriod(si){
+    var idxs = getStudentAllWeekIdxs(si);
+    if(idxs.length === 0) return '';
+    var first = WL[idxs[0]];          // e.g. "115/5/4-5/8"
+    var last  = WL[idxs[idxs.length-1]]; // e.g. "115/5/25-5/29"
+    var startDate = first.split('-')[0]; // "115/5/4"
+    var endDate   = last.split('-').pop(); // "5/29"
+    if(first === last) return first;
+    return startDate + '-' + endDate;
+  }
+
   // Compress consecutive week indices into readable range strings
   // e.g. [0,1,2,3] -> ["115/5/4-5/8 ~ 115/5/25-5/29"]
   // e.g. [0,1,5,6] -> ["115/5/4-5/8 ~ 115/5/11-5/15", "115/6/8-6/12 ~ 115/6/15-6/19"]
@@ -500,13 +529,119 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   }
 
   function renderCard(el){
+    if(IS_ADMIN) return renderAdmin(el);
+    return renderViewer(el);
+  }
+
+  // ====== 人資部管理模式渲染 ======
+  function renderAdmin(el){
+    // Collect all students with their periods
+    var students = [];
+    var seen = {};
+    
+    if(wIdx === -1){
+      // All time: show all students
+      S.forEach(function(st, si){
+        students.push(si);
+      });
+    } else {
+      // Specific week: show students active in that week (across all depts)
+      var w = W[wIdx];
+      var depts = w[1];
+      Object.keys(depts).forEach(function(dk){
+        depts[dk].forEach(function(si){
+          if(!seen[si]){ seen[si] = true; students.push(si); }
+        });
+      });
+    }
+
+    // Apply search filter
+    students = students.filter(matchSearch);
+
+    // Apply status filter
+    if(statusFilter === 'unfilled'){
+      students = students.filter(function(si){ return !S[si].h || !S[si].h.trim(); });
+    } else if(statusFilter === 'filled'){
+      students = students.filter(function(si){ return S[si].h && S[si].h.trim(); });
+    }
+
+    // Sort by start week
+    students.sort(function(a, b){
+      var aIdxs = getStudentAllWeekIdxs(a);
+      var bIdxs = getStudentAllWeekIdxs(b);
+      var aMin = aIdxs.length ? aIdxs[0] : 9999;
+      var bMin = bIdxs.length ? bIdxs[0] : 9999;
+      return aMin - bMin;
+    });
+
+    var total = students.length;
+    var filledCount = students.filter(function(si){ return S[si].h && S[si].h.trim(); }).length;
+    var pendingCount = total - filledCount;
+
+    // Summary
+    var h = '<div class="summary-bar">';
+    h += '<div class="summary-card"><div class="num">'+total+'</div><div class="label">'+(onlyUnfilled?'\u5f85\u586b\u5beb\u4eba\u6578':'\u7b26\u5408\u689d\u4ef6\u5b78\u54e1')+'</div></div>';
+    if(!onlyUnfilled){
+      h += '<div class="summary-card"><div class="num" style="color:var(--green)">'+filledCount+'</div><div class="label">\u5df2\u586b\u5beb</div></div>';
+      h += '<div class="summary-card"><div class="num" style="color:#ef4444">'+pendingCount+'</div><div class="label">\u5f85\u586b\u5beb</div></div>';
+    }
+    // School breakdown
+    var schMap = {};
+    students.forEach(function(si){ schMap[S[si].s]=(schMap[S[si].s]||0)+1; });
+    var topSch = Object.entries(schMap).sort(function(a,b){ return b[1]-a[1]; })[0];
+    h += '<div class="summary-card"><div class="num" style="font-size:19px">'+(topSch?escHtml(topSch[0]):'-')+'</div><div class="label">\u6700\u591a\u5b78\u6821 ('+(topSch?topSch[1]:0)+'\u4eba)</div></div>';
+    h += '</div>';
+
+    var weekLabel = (wIdx===-1) ? '\u6240\u6709\u5b78\u54e1' : W[wIdx][0];
+    h += '<div class="week-title">'+escHtml(weekLabel)+' <span class="badge">'+total+' \u4f4d\u5b78\u54e1</span></div>';
+
+    if(!students.length){
+      if(onlyUnfilled){
+        h += '<div class="empty-state"><div class="icon">&#9989;</div><p>\u6240\u6709\u5b78\u54e1\u7684\u4eba\u4e8b\u865f\u5df2\u586b\u5beb\u5b8c\u6210\uff01</p></div>';
+      } else {
+        h += '<div class="empty-state"><div class="icon">&#128203;</div><p>\u7121\u7b26\u5408\u689d\u4ef6\u7684\u5b78\u54e1</p></div>';
+      }
+    } else {
+      h += '<div class="dept-grid" style="grid-template-columns:1fr">';
+      h += '<div class="dept-card"><div class="stu-table-wrap"><table class="stu-table">';
+      h += '<thead><tr><th>\u59d3\u540d</th><th>\u5b78\u6821</th><th>\u7c21\u78bc</th><th>\u4eba\u4e8b\u865f</th><th>\u5e74\u7d1a</th><th>\u5be6\u7fd2\u671f\u9593</th></tr></thead><tbody>';
+      students.forEach(function(si){
+        var st = S[si];
+        var filledCls = st.h ? ' filled' : '';
+        var period = getStudentPeriod(si);
+        h += '<tr>';
+        h += '<td class="stu-name">'+escHtml(st.n)+'</td>';
+        h += '<td>'+escHtml(st.s)+'</td>';
+        h += '<td class="stu-code">'+escHtml(st.c)+'</td>';
+        h += '<td><input class="hr-input'+filledCls+'" type="text" value="'+escHtml(st.h)+'" placeholder="\u5f85\u586b\u5beb" data-si="'+si+'"></td>';
+        h += '<td><span class="grade-tag '+gc(st.g)+'">'+escHtml(displayGrade(st.g))+'</span></td>';
+        h += '<td><span class="time-tag">'+escHtml(period)+'</span></td>';
+        h += '</tr>';
+      });
+      h += '</tbody></table></div></div>';
+      h += '</div>';
+    }
+    el.innerHTML = h;
+
+    el.querySelectorAll('.hr-input').forEach(function(inp){
+      inp.addEventListener('change', function(){
+        var si = +this.getAttribute('data-si');
+        saveHr(si, this.value);
+        this.className = 'hr-input' + (this.value ? ' filled' : '');
+        toast('\u5df2\u5132\u5b58 ' + S[si].n + ' \u7684\u4eba\u4e8b\u865f');
+      });
+    });
+  }
+
+  // ====== 科部查閱模式渲染 ======
+  function renderViewer(el){
     var isAll = (wIdx === -1);
     var depts = isAll ? getAllWeeksMerged() : W[wIdx][1];
     var dks = Object.keys(depts).sort();
     if(deptF) dks = dks.filter(function(d){ return d===deptF; });
 
     // Should we show time column? Only when a specific dept is filtered
-    var showTime = !!deptF;
+    var showTime = IS_ADMIN || !!deptF;
 
     var filtered = {};
     var total = 0;
@@ -569,7 +704,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
         }
         h += '<div class="dept-card"><div class="dept-card-header"><span class="dept-name">'+escHtml(dk)+'</span><span class="dept-count">'+ids.length+' \u4eba</span></div>';
         h += '<div class="stu-table-wrap"><table class="stu-table"><thead><tr><th>\u59d3\u540d</th><th>\u5b78\u6821</th><th>\u7c21\u78bc</th><th>\u4eba\u4e8b\u865f</th><th>\u5e74\u7d1a</th>';
-        if(showTime) h += '<th>\u5be6\u7fd2\u6642\u9593\uff08\u5168\u671f\uff09</th>';
+        if(showTime) h += '<th>\u5be6\u7fd2\u671f\u9593</th>';
         h += '</tr></thead><tbody>';
         ids.forEach(function(si){
           var st = S[si];
@@ -589,13 +724,8 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
           }
           h += '<td><span class="grade-tag '+gc(st.g)+'">'+escHtml(displayGrade(st.g))+'</span></td>';
           if(showTime){
-            var weekIdxs = getStudentAllWeekIdxs(si);
-            var ranges = compressToRanges(weekIdxs);
-            h += '<td class="time-cell">';
-            ranges.forEach(function(r){
-              h += '<span class="time-tag">'+escHtml(r)+'</span>';
-            });
-            h += '</td>';
+            var period = getStudentPeriod(si);
+            h += '<td><span class="time-tag">'+escHtml(period)+'</span></td>';
           }
           h += '</tr>';
         });
