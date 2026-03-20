@@ -119,6 +119,13 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   <div class="filter-group"><label>選擇週次</label><select id="weekSelect"></select></div>
   <div class="filter-group"><label>篩選科部</label><select id="deptFilter"><option value="">全部科部</option></select></div>
   <div class="filter-group"><label>搜尋</label><input type="text" id="searchInput" placeholder="姓名、學校或簡碼…"></div>
+  <div class="filter-group" id="filterUnfilledGroup" style="display:none">
+    <label style="cursor:pointer;display:flex;align-items:center;gap:5px">
+      <input type="checkbox" id="chkUnfilled" checked style="width:16px;height:16px;cursor:pointer;accent-color:#2563eb">
+      <span>只顯示待填寫</span>
+    </label>
+  </div>
+  <div class="filter-group"><label>搜尋</label><input type="text" id="searchInput" placeholder="姓名、學校或簡碼…"></div>
   <div class="view-toggle">
     <button id="btnCard" class="active">卡片檢視</button>
     <button id="btnTable">總表檢視</button>
@@ -167,6 +174,14 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   }
 
   var view = 'card', wIdx = -1, deptF = '', search = '';
+  var onlyUnfilled = IS_ADMIN; // admin default: only show unfilled
+
+  // Show unfilled toggle only in admin mode
+  if(IS_ADMIN){
+    document.getElementById('filterUnfilledGroup').style.display = '';
+  }
+  var chkUnfilled = document.getElementById('chkUnfilled');
+  chkUnfilled.addEventListener('change', function(){ onlyUnfilled = this.checked; render(); });
 
   var weekSel = document.getElementById('weekSelect');
   var oAll = document.createElement('option');
@@ -495,10 +510,24 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
     var filtered = {};
     var total = 0;
+    var pendingTotal = 0;
     dks.forEach(function(dk){
       var ids = depts[dk].filter(matchSearch);
+      // In admin + onlyUnfilled mode: filter out students who already have HR ID
+      if(IS_ADMIN && onlyUnfilled){
+        ids = ids.filter(function(si){ return !S[si].h || !S[si].h.trim(); });
+      }
       if(ids.length){ filtered[dk] = ids; total += ids.length; }
     });
+    // Count pending (unfilled) separately for summary
+    if(!IS_ADMIN || !onlyUnfilled){
+      dks.forEach(function(dk){
+        var ids = (depts[dk]||[]).filter(matchSearch);
+        ids.forEach(function(si){ if(!S[si].h || !S[si].h.trim()) pendingTotal++; });
+      });
+    } else {
+      pendingTotal = total;
+    }
 
     var fks = Object.keys(filtered).sort();
     var maxD = '-', maxC = 0;
@@ -509,7 +538,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
     var periodLabel = isAll ? '\u5168\u5b78\u5e74\u5831\u5230\u4eba\u6b21' : '\u672c\u9031\u5831\u5230\u4eba\u6578';
     var h = '<div class="summary-bar">';
-    h += '<div class="summary-card"><div class="num">'+total+'</div><div class="label">'+periodLabel+'</div></div>';
+    h += '<div class="summary-card"><div class="num">'+total+'</div><div class="label">'+(IS_ADMIN && onlyUnfilled ? '\u5f85\u586b\u5beb\u4eba\u6578' : periodLabel)+'</div></div>';
     h += '<div class="summary-card"><div class="num">'+fks.length+'</div><div class="label">\u6d89\u53ca\u79d1\u90e8\u6578</div></div>';
     h += '<div class="summary-card"><div class="num" style="font-size:22px">'+escHtml(maxD)+'</div><div class="label">\u6700\u591a\u4eba\u79d1\u90e8 ('+maxC+'\u4eba)</div></div>';
     h += '<div class="summary-card"><div class="num" style="font-size:19px">'+(topSch?escHtml(topSch[0]):'-')+'</div><div class="label">\u6700\u591a\u5b78\u6821 ('+(topSch?topSch[1]:0)+'\u4eba)</div></div>';
@@ -519,7 +548,11 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     h += '<div class="week-title">'+escHtml(weekLabel)+' <span class="badge">'+total+' \u4f4d\u5b78\u54e1</span></div>';
 
     if(!fks.length){
-      h += '<div class="empty-state"><div class="icon">&#128203;</div><p>\u672c\u9031\u7121\u7b26\u5408\u689d\u4ef6\u7684\u5b78\u54e1\u5831\u5230</p></div>';
+      if(IS_ADMIN && onlyUnfilled){
+        h += '<div class="empty-state"><div class="icon">&#9989;</div><p>\u672c\u9031\u6240\u6709\u5b78\u54e1\u7684\u4eba\u4e8b\u865f\u5df2\u586b\u5beb\u5b8c\u6210\uff01</p></div>';
+      } else {
+        h += '<div class="empty-state"><div class="icon">&#128203;</div><p>\u672c\u9031\u7121\u7b26\u5408\u689d\u4ef6\u7684\u5b78\u54e1\u5831\u5230</p></div>';
+      }
     } else {
       h += '<div class="dept-grid" style="'+(showTime?'grid-template-columns:1fr':'')+'">';
       fks.forEach(function(dk){
