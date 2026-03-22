@@ -32,7 +32,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 .summary-card .label{font-size:11.5px;color:var(--text3);font-weight:500;margin-top:3px}
 .week-title{font-size:18px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:10px}
 .week-title .badge{background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:3px 12px;border-radius:20px}
-.dept-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px;margin-bottom:32px}
+.dept-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(580px,1fr));gap:14px;margin-bottom:32px}
 .dept-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;transition:transform .15s,box-shadow .15s}
 .dept-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
 .dept-card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid var(--border)}
@@ -475,8 +475,8 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     return entries;
   }
 
-  // Get a student's compact period string: e.g. "115/5/4-5/29"
-  // = first week start date + last week end date
+  // Get a student's compact period string: e.g. "115/5/4~5/29"
+  // = first week start date ~ last week end date
   function getStudentPeriod(si){
     var idxs = getStudentAllWeekIdxs(si);
     if(idxs.length === 0) return '';
@@ -485,7 +485,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     var startDate = first.split('-')[0];
     var endDate   = last.split('-').pop();
     if(first === last) return first;
-    return startDate + '-' + endDate;
+    return startDate + '~' + endDate;
   }
 
   // Get a student's compact period in a SPECIFIC dept: e.g. "115/5/4~5/29"
@@ -653,7 +653,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     if(deptF) dks = dks.filter(function(d){ return d===deptF; });
 
     // Should we show time column? Only when a specific dept is filtered
-    var showTime = IS_ADMIN || !!deptF;
+    var showTime = true;
 
     var filtered = {};
     var total = 0;
@@ -701,7 +701,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
         h += '<div class="empty-state"><div class="icon">&#128203;</div><p>\u672c\u9031\u7121\u7b26\u5408\u689d\u4ef6\u7684\u5b78\u54e1\u5831\u5230</p></div>';
       }
     } else {
-      h += '<div class="dept-grid" style="'+(showTime?'grid-template-columns:1fr':'')+'">';
+      h += '<div class="dept-grid" style="'+(deptF?'grid-template-columns:1fr':'')+'">';
       fks.forEach(function(dk){
         var ids = filtered[dk];
         // Sort students by their earliest week in this dept (chronological)
