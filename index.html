@@ -660,10 +660,16 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     var pendingTotal = 0;
     dks.forEach(function(dk){
       var ids = depts[dk].filter(matchSearch);
-      // In admin + onlyUnfilled mode: filter out students who already have HR ID
-      if(IS_ADMIN && onlyUnfilled){
-        ids = ids.filter(function(si){ return !S[si].h || !S[si].h.trim(); });
+
+      // When a specific week is selected (not "all time"),
+      // only show students whose FIRST week in this dept is the selected week
+      if(!isAll){
+        ids = ids.filter(function(si){
+          var deptIdxs = getStudentDeptWeekIdxs(si, dk);
+          return deptIdxs.length > 0 && deptIdxs[0] === wIdx;
+        });
       }
+
       if(ids.length){ filtered[dk] = ids; total += ids.length; }
     });
     // Count pending (unfilled) separately for summary
@@ -683,7 +689,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
     fks.forEach(function(k){ filtered[k].forEach(function(i){ schMap[S[i].s]=(schMap[S[i].s]||0)+1; }); });
     var topSch = Object.entries(schMap).sort(function(a,b){ return b[1]-a[1]; })[0];
 
-    var periodLabel = isAll ? '\u5168\u5b78\u5e74\u5831\u5230\u4eba\u6b21' : '\u672c\u9031\u5831\u5230\u4eba\u6578';
+    var periodLabel = isAll ? '\u5168\u5b78\u5e74\u5831\u5230\u4eba\u6b21' : '\u672c\u9031\u65b0\u5831\u5230\u4eba\u6578';
     var h = '<div class="summary-bar">';
     h += '<div class="summary-card"><div class="num">'+total+'</div><div class="label">'+(IS_ADMIN && onlyUnfilled ? '\u5f85\u586b\u5beb\u4eba\u6578' : periodLabel)+'</div></div>';
     h += '<div class="summary-card"><div class="num">'+fks.length+'</div><div class="label">\u6d89\u53ca\u79d1\u90e8\u6578</div></div>';
