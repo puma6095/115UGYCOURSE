@@ -178,10 +178,9 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
   var HR_KEY = 'hr_ids_115';
   var hrStore = {};
-  if(IS_ADMIN){
-    try { hrStore = JSON.parse(localStorage.getItem(HR_KEY) || '{}'); } catch(e) {}
-    Object.keys(hrStore).forEach(function(k){ var i = +k; if(S[i]) S[i].h = hrStore[k]; });
-  }
+  // Both modes load from localStorage (admin writes here, viewer reads as cache)
+  try { hrStore = JSON.parse(localStorage.getItem(HR_KEY) || '{}'); } catch(e) {}
+  Object.keys(hrStore).forEach(function(k){ var i = +k; if(S[i]) S[i].h = hrStore[k]; });
 
   var view = 'card', wIdx = -1, deptF = '', search = '';
   var onlyUnfilled = IS_ADMIN; // admin default: only show unfilled
@@ -837,18 +836,21 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
   render();
 
-  // 查閱模式：自動從 Google Sheets 讀取最新人事號
-  if(!IS_ADMIN && APPS_SCRIPT_URL){
+  // 自動從 Google Sheets 讀取最新人事號（兩種模式都執行）
+  if(APPS_SCRIPT_URL){
     jsonpCall('fetch', function(json){
       if(json.status === 'ok' && json.data && json.data.length > 0){
         var count = 0;
         json.data.forEach(function(item){
-          var si = S.findIndex(function(s){ return s.r === item.row && s.c === item.code; });
+          var si = S.findIndex(function(s){ return s.r === item.row; });
           if(si >= 0 && item.hrId){
             S[si].h = item.hrId;
+            hrStore[si] = item.hrId;
             count++;
           }
         });
+        // Save to localStorage so both modes have latest data
+        try { localStorage.setItem(HR_KEY, JSON.stringify(hrStore)); } catch(e){}
         if(count > 0) render();
       }
     }, function(){});
