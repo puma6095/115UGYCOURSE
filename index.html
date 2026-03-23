@@ -270,28 +270,22 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   function syncToSheet(){
     if(!checkUrl()) return;
 
+    // Send ALL students (including empty hrId to clear Sheet values)
     var payload = [];
     S.forEach(function(st){
-      if(st.h && st.h.trim()){
-        payload.push({
-          name: st.n,
-          school: st.s,
-          grade: displayGrade(st.g),
-          code: st.c,
-          hrId: st.h,
-          row: st.r
-        });
-      }
+      payload.push({
+        name: st.n,
+        code: st.c,
+        hrId: st.h || '',
+        row: st.r
+      });
     });
 
-    if(payload.length === 0){
-      toast('\u6c92\u6709\u4efb\u4f55\u5df2\u586b\u5beb\u7684\u4eba\u4e8b\u865f\u53ef\u540c\u6b65');
-      return;
-    }
+    var filledCount = payload.filter(function(p){ return p.hrId.trim(); }).length;
 
     var btn = document.getElementById('btnSync');
     var origHtml = btn.innerHTML;
-    btn.textContent = '\u2026 \u540c\u6b65\u4e2d (' + payload.length + ' \u7b46)';
+    btn.textContent = '\u2026 \u540c\u6b65\u4e2d (' + filledCount + ' \u7b46\u6709\u4eba\u4e8b\u865f)';
     btn.disabled = true;
 
     // 建立隱藏 iframe 接收回應
