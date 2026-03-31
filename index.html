@@ -300,16 +300,13 @@ function fetchFromSheetBtn(){
 }
 
 function exportHrData(){
-  // Header: 姓名,學校,身份,簡碼,人事號,實習期間,各週科別...
-  var header='\uFEFF\u59d3\u540d,\u5b78\u6821,\u8eab\u4efd,\u7c21\u78bc,\u4eba\u4e8b\u865f,\u5be6\u7fd2\u671f\u9593';
+  var header='\uFEFF\u59d3\u540d,\u5b78\u6821,\u8eab\u4efd,\u7c21\u78bc,\u4eba\u4e8b\u865f';
   WL.forEach(function(wl){header+=','+wl;});
   var csv=header+'\n';
   S.forEach(function(st,si){
-    var period=getStudentPeriod(si);
-    // Build weekly dept map
     var weekDepts={};
     st.sc.forEach(function(e){weekDepts[e[0]]=e[1];});
-    csv+=st.n+','+st.s+','+st.g+','+st.c+','+st.h+','+period;
+    csv+=st.n+','+st.s+','+st.g+','+st.c+','+st.h;
     WL.forEach(function(wl,wi){csv+=','+(weekDepts[wi]||'');});
     csv+='\n';
   });
