@@ -234,7 +234,13 @@ function renderViewer(el){
   if(deptF)dks=dks.filter(function(d){return d===deptF;});
   var filtered={},total=0;
   dks.forEach(function(dk){var ids=depts[dk].filter(matchSearch);if(!isAll){ids=ids.filter(function(si){var di=getStudentDeptWeekIdxs(si,dk);return di.length>0&&di[0]===wIdx;});}if(ids.length){filtered[dk]=ids;total+=ids.length;}});
-  var fks=Object.keys(filtered).sort(),maxD='-',maxC=0;
+  var fks=Object.keys(filtered).sort(function(a,b){
+    // Sort depts by earliest week of any student in that dept
+    var aMin=9999,bMin=9999;
+    filtered[a].forEach(function(si){var x=getStudentDeptWeekIdxs(si,a);if(x.length&&x[0]<aMin)aMin=x[0];});
+    filtered[b].forEach(function(si){var x=getStudentDeptWeekIdxs(si,b);if(x.length&&x[0]<bMin)bMin=x[0];});
+    return aMin-bMin;
+  }),maxD='-',maxC=0;
   fks.forEach(function(k){if(filtered[k].length>maxC){maxC=filtered[k].length;maxD=k;}});
   var schMap={};fks.forEach(function(k){filtered[k].forEach(function(i){schMap[S[i].s]=(schMap[S[i].s]||0)+1;});});
   var topSch=Object.entries(schMap).sort(function(a,b){return b[1]-a[1];})[0];
