@@ -199,8 +199,10 @@ function toast(m){var t=document.getElementById('toast');t.textContent=m;t.class
 function escHtml(s){var d=document.createElement('div');d.appendChild(document.createTextNode(s));return d.innerHTML;}
 function getStudentDeptWeekIdxs(si,dept){var r=[];S[si].sc.forEach(function(e){if(e[1]===dept)r.push(e[0]);});r.sort(function(a,b){return a-b;});return r;}
 function getStudentAllWeekIdxs(si){var r=[];S[si].sc.forEach(function(e){r.push(e[0]);});r.sort(function(a,b){return a-b;});return r;}
-function getStudentPeriod(si){var x=getStudentAllWeekIdxs(si);if(!x.length)return'';var f=WL[x[0]],l=WL[x[x.length-1]];if(f===l)return f;return f.split('-')[0]+'~'+l.split('-').pop();}
-function getStudentDeptPeriod(si,dept){var x=getStudentDeptWeekIdxs(si,dept);if(!x.length)return'';var f=WL[x[0]],l=WL[x[x.length-1]];if(f===l)return f;return f.split('-')[0]+'~'+l.split('-').pop();}
+function weekEndMD(wl){var p=wl.split('-'),st=p[0].split('/'),en=p[p.length-1].split('/');if(en.length>=2)return en[en.length-2]+'/'+en[en.length-1];var m=+st[st.length-2],d=+en[0];if(d<+st[st.length-1])m=m%12+1;return m+'/'+d;}
+function fmtPeriod(f,l){if(f===l)return f;return f.split('-')[0]+'~'+weekEndMD(l);}
+function getStudentPeriod(si){var x=getStudentAllWeekIdxs(si);if(!x.length)return'';return fmtPeriod(WL[x[0]],WL[x[x.length-1]]);}
+function getStudentDeptPeriod(si,dept){var x=getStudentDeptWeekIdxs(si,dept);if(!x.length)return'';return fmtPeriod(WL[x[0]],WL[x[x.length-1]]);}
 function getAllWeeksMerged(){var m={};W.forEach(function(w){Object.keys(w[1]).forEach(function(dk){if(!m[dk])m[dk]={};w[1][dk].forEach(function(si){m[dk][si]=true;});});});var r={};Object.keys(m).forEach(function(dk){r[dk]=Object.keys(m[dk]).map(Number);});return r;}
 function render(){var el=document.getElementById('main');if(!S)return;if(view==='card'){if(IS_ADMIN)renderAdmin(el);else renderViewer(el);}else{renderTable(el);}}
 
