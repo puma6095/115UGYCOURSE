@@ -100,6 +100,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   </div>
 </div>
 <div class="controls">
+  <div class="filter-group"><label>選擇月份</label><select id="monthSelect" style="min-width:150px"></select></div>
   <div class="filter-group"><label id="weekLabel">選擇週次</label><select id="weekSelect"></select></div>
   <div class="filter-group" id="deptFilterGroup"><label>篩選科部</label><select id="deptFilter"><option value="">全部科部</option></select></div>
   <div class="filter-group"><label>搜尋</label><input type="text" id="searchInput" placeholder="姓名、學校或簡碼…"></div>
@@ -161,7 +162,7 @@ function jsonpCall(action,onOk,onErr){var cb='__cb'+Date.now()+Math.random().toS
 jsonpCall('fulldata',function(json){if(json.status!=='ok'||!json.students){document.getElementById('loadingMsg').textContent='\u8f09\u5165\u5931\u6557\uff1a'+(json.message||'\u672a\u77e5\u932f\u8aa4');return;}initApp(json);},function(){document.getElementById('loadingMsg').textContent='\u8f09\u5165\u903e\u6642\uff0c\u8acb\u78ba\u8a8d Apps Script \u5df2\u90e8\u7f72';});
 
 var S,W,WL,AD,HR_KEY='hr_ids_115',hrStore={};
-var view='card',wIdx=-1,deptF='',search='';
+var view='card',wIdx=-1,mIdx=-1,MS=[],WM=[],deptF='',search='';
 var statusFilter='unfilled',onlyUnfilled=IS_ADMIN;
 
 function initApp(DATA){
@@ -171,12 +172,16 @@ function initApp(DATA){
   try{hrStore=JSON.parse(localStorage.getItem(HR_KEY)||'{}');}catch(e){}
   if(IS_ADMIN){Object.keys(hrStore).forEach(function(k){var i=+k;if(S[i]&&hrStore[k])S[i].h=hrStore[k];});}
 
+  buildMonths();
+  var monthSel=document.getElementById('monthSelect');
+  var mAll=document.createElement('option');mAll.value=-1;mAll.textContent='\u2500\u2500 \u6240\u6709\u6708\u4efd \u2500\u2500';monthSel.appendChild(mAll);
+  MS.forEach(function(m,i){var o=document.createElement('option');o.value=i;o.textContent=m.label+' ('+countMonthArrivals(i)+'\u4eba)';monthSel.appendChild(o);});
   var weekSel=document.getElementById('weekSelect');
-  var oAll=document.createElement('option');oAll.value=-1;oAll.textContent='\u2500\u2500 \u6240\u6709\u6642\u9593 \u2500\u2500';weekSel.appendChild(oAll);
-  W.forEach(function(w,i){var t=0;Object.keys(w[1]).forEach(function(k){t+=w[1][k].length;});var o=document.createElement('option');o.value=i;o.textContent=w[0]+' ('+t+'\u4eba)';weekSel.appendChild(o);});
+  buildWeekOptions();
   var deptSel=document.getElementById('deptFilter');
   AD.forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d;deptSel.appendChild(o);});
 
+  monthSel.addEventListener('change',function(e){mIdx=parseInt(e.target.value,10);wIdx=-1;buildWeekOptions();render();});
   weekSel.addEventListener('change',function(e){wIdx=parseInt(e.target.value,10);render();});
   deptSel.addEventListener('change',function(e){deptF=e.target.value;render();});
   document.getElementById('searchInput').addEventListener('input',function(e){search=e.target.value.trim().toLowerCase();render();});
@@ -204,11 +209,28 @@ function fmtPeriod(f,l){if(f===l)return f;return f.split('-')[0]+'~'+weekEndMD(l
 function getStudentPeriod(si){var x=getStudentAllWeekIdxs(si);if(!x.length)return'';return fmtPeriod(WL[x[0]],WL[x[x.length-1]]);}
 function getStudentDeptPeriod(si,dept){var x=getStudentDeptWeekIdxs(si,dept);if(!x.length)return'';return fmtPeriod(WL[x[0]],WL[x[x.length-1]]);}
 function getAllWeeksMerged(){var m={};W.forEach(function(w){Object.keys(w[1]).forEach(function(dk){if(!m[dk])m[dk]={};w[1][dk].forEach(function(si){m[dk][si]=true;});});});var r={};Object.keys(m).forEach(function(dk){r[dk]=Object.keys(m[dk]).map(Number);});return r;}
+function buildMonths(){
+  // \u4ee5\u9031\u6b21\u8d77\u59cb\u65e5\uff08\u5831\u5230\u65e5\uff09\u6b78\u5c6c\u6708\u4efd\uff0c\u5982 115/6/29-7/3 \u6b78\u5165 115\u5e746\u6708
+  var idx={};MS=[];WM=[];
+  WL.forEach(function(wl,wi){var m=/^\s*(\d+)\s*\/\s*(\d+)/.exec(wl);var k=m?(+m[1])*100+(+m[2]):-1;
+    if(!(k in idx)){idx[k]=MS.length;MS.push({key:k,label:m?(+m[1])+'\u5e74'+(+m[2])+'\u6708':'\u5176\u4ed6',weeks:[]});}
+    MS[idx[k]].weeks.push(wi);WM[wi]=idx[k];});
+}
+function buildWeekOptions(){
+  var weekSel=document.getElementById('weekSelect');weekSel.innerHTML='';
+  var oAll=document.createElement('option');oAll.value=-1;oAll.textContent=mIdx===-1?'\u2500\u2500 \u6240\u6709\u6642\u9593 \u2500\u2500':'\u2500\u2500 '+MS[mIdx].label+'\u6574\u6708 \u2500\u2500';weekSel.appendChild(oAll);
+  W.forEach(function(w,i){if(mIdx!==-1&&WM[i]!==mIdx)return;var t=0;Object.keys(w[1]).forEach(function(k){t+=w[1][k].length;});var o=document.createElement('option');o.value=i;o.textContent=w[0]+' ('+t+'\u4eba)';weekSel.appendChild(o);});
+  weekSel.value=String(wIdx);
+}
+function getMonthMerged(mi){var m={};MS[mi].weeks.forEach(function(wi){var d=W[wi][1];Object.keys(d).forEach(function(dk){if(!m[dk])m[dk]={};d[dk].forEach(function(si){m[dk][si]=true;});});});var r={};Object.keys(m).forEach(function(dk){r[dk]=Object.keys(m[dk]).map(Number);});return r;}
+function isMonthArrival(si,dk,mi){var x=getStudentDeptWeekIdxs(si,dk);return x.length>0&&WM[x[0]]===mi;}
+function countMonthArrivals(mi){var d=getMonthMerged(mi),t=0;Object.keys(d).forEach(function(dk){d[dk].forEach(function(si){if(isMonthArrival(si,dk,mi))t++;});});return t;}
 function render(){var el=document.getElementById('main');if(!S)return;if(view==='card'){if(IS_ADMIN)renderAdmin(el);else renderViewer(el);}else{renderTable(el);}}
 
 function renderAdmin(el){
   var students=[],seen={};
-  if(wIdx===-1){S.forEach(function(st,si){students.push(si);});}
+  if(wIdx===-1&&mIdx!==-1){S.forEach(function(st,si){if(st.sc.some(function(e){return WM[e[0]]===mIdx;}))students.push(si);});}
+  else if(wIdx===-1){S.forEach(function(st,si){students.push(si);});}
   else{var w=W[wIdx],d=w[1];Object.keys(d).forEach(function(dk){d[dk].forEach(function(si){if(!seen[si]){seen[si]=true;students.push(si);}});});}
   students=students.filter(matchSearch);
   if(statusFilter==='unfilled')students=students.filter(function(si){return!S[si].h||!S[si].h.trim();});
@@ -220,7 +242,7 @@ function renderAdmin(el){
   var h='<div class="summary-bar"><div class="summary-card"><div class="num">'+total+'</div><div class="label">'+(onlyUnfilled?'\u5f85\u586b\u5beb\u4eba\u6578':'\u7b26\u5408\u689d\u4ef6\u5b78\u54e1')+'</div></div>';
   if(!onlyUnfilled){h+='<div class="summary-card"><div class="num" style="color:var(--green)">'+filledC+'</div><div class="label">\u5df2\u586b\u5beb</div></div><div class="summary-card"><div class="num" style="color:#ef4444">'+(total-filledC)+'</div><div class="label">\u5f85\u586b\u5beb</div></div>';}
   h+='<div class="summary-card"><div class="num" style="font-size:19px">'+(topSch?escHtml(topSch[0]):'-')+'</div><div class="label">\u6700\u591a\u5b78\u6821 ('+(topSch?topSch[1]:0)+'\u4eba)</div></div></div>';
-  h+='<div class="week-title">'+escHtml(wIdx===-1?'\u6240\u6709\u5b78\u54e1':W[wIdx][0])+' <span class="badge">'+total+' \u4f4d\u5b78\u54e1</span></div>';
+  h+='<div class="week-title">'+escHtml(wIdx!==-1?W[wIdx][0]:(mIdx!==-1?MS[mIdx].label:'\u6240\u6709\u5b78\u54e1'))+' <span class="badge">'+total+' \u4f4d\u5b78\u54e1</span></div>';
   if(!students.length){h+='<div class="empty-state"><div class="icon">'+(onlyUnfilled?'&#9989;':'&#128203;')+'</div><p>'+(onlyUnfilled?'\u6240\u6709\u5b78\u54e1\u4eba\u4e8b\u865f\u5df2\u586b\u5beb\u5b8c\u6210\uff01':'\u7121\u7b26\u5408\u689d\u4ef6\u5b78\u54e1')+'</p></div>';}
   else{
     h+='<div class="dept-grid" style="grid-template-columns:1fr"><div class="dept-card"><div class="stu-table-wrap"><table class="stu-table"><thead><tr><th>\u59d3\u540d</th><th>\u5b78\u6821</th><th>\u7c21\u78bc</th><th>\u4eba\u4e8b\u865f</th><th>\u5e74\u7d1a</th><th>\u5be6\u7fd2\u671f\u9593</th></tr></thead><tbody>';
@@ -232,10 +254,10 @@ function renderAdmin(el){
 }
 
 function renderViewer(el){
-  var isAll=(wIdx===-1),depts=isAll?getAllWeeksMerged():W[wIdx][1],dks=Object.keys(depts).sort();
+  var isMonth=(wIdx===-1&&mIdx!==-1),isAll=(wIdx===-1&&!isMonth),depts=isAll?getAllWeeksMerged():(isMonth?getMonthMerged(mIdx):W[wIdx][1]),dks=Object.keys(depts).sort();
   if(deptF)dks=dks.filter(function(d){return d===deptF;});
   var filtered={},total=0;
-  dks.forEach(function(dk){var ids=depts[dk].filter(matchSearch);if(!isAll){ids=ids.filter(function(si){var di=getStudentDeptWeekIdxs(si,dk);return di.length>0&&di[0]===wIdx;});}if(ids.length){filtered[dk]=ids;total+=ids.length;}});
+  dks.forEach(function(dk){var ids=depts[dk].filter(matchSearch);if(isMonth){ids=ids.filter(function(si){return isMonthArrival(si,dk,mIdx);});}else if(!isAll){ids=ids.filter(function(si){var di=getStudentDeptWeekIdxs(si,dk);return di.length>0&&di[0]===wIdx;});}if(ids.length){filtered[dk]=ids;total+=ids.length;}});
   var fks=Object.keys(filtered).sort(function(a,b){
     // Sort depts by earliest week of any student in that dept
     var aMin=9999,bMin=9999;
@@ -246,11 +268,11 @@ function renderViewer(el){
   fks.forEach(function(k){if(filtered[k].length>maxC){maxC=filtered[k].length;maxD=k;}});
   var schMap={};fks.forEach(function(k){filtered[k].forEach(function(i){schMap[S[i].s]=(schMap[S[i].s]||0)+1;});});
   var topSch=Object.entries(schMap).sort(function(a,b){return b[1]-a[1];})[0];
-  var h='<div class="summary-bar"><div class="summary-card"><div class="num">'+total+'</div><div class="label">'+(isAll?'\u5168\u5b78\u5e74\u5831\u5230\u4eba\u6b21':'\u672c\u9031\u65b0\u5831\u5230\u4eba\u6578')+'</div></div>';
+  var h='<div class="summary-bar"><div class="summary-card"><div class="num">'+total+'</div><div class="label">'+(isAll?'\u5168\u5b78\u5e74\u5831\u5230\u4eba\u6b21':(isMonth?'\u672c\u6708\u65b0\u5831\u5230\u4eba\u6578':'\u672c\u9031\u65b0\u5831\u5230\u4eba\u6578'))+'</div></div>';
   h+='<div class="summary-card"><div class="num">'+fks.length+'</div><div class="label">\u6d89\u53ca\u79d1\u90e8\u6578</div></div>';
   h+='<div class="summary-card"><div class="num" style="font-size:22px">'+escHtml(maxD)+'</div><div class="label">\u6700\u591a\u4eba\u79d1\u90e8 ('+maxC+'\u4eba)</div></div>';
   h+='<div class="summary-card"><div class="num" style="font-size:19px">'+(topSch?escHtml(topSch[0]):'-')+'</div><div class="label">\u6700\u591a\u5b78\u6821 ('+(topSch?topSch[1]:0)+'\u4eba)</div></div></div>';
-  h+='<div class="week-title">'+escHtml(isAll?'\u6240\u6709\u6642\u9593\uff08\u5168\u5b78\u5e74\uff09':W[wIdx][0])+' <span class="badge">'+total+' \u4f4d\u5b78\u54e1</span></div>';
+  h+='<div class="week-title">'+escHtml(isAll?'\u6240\u6709\u6642\u9593\uff08\u5168\u5b78\u5e74\uff09':(isMonth?MS[mIdx].label+'\uff08\u7576\u6708\u5831\u5230\uff09':W[wIdx][0]))+' <span class="badge">'+total+' \u4f4d\u5b78\u54e1</span></div>';
   if(!fks.length){h+='<div class="empty-state"><div class="icon">&#128203;</div><p>\u7121\u7b26\u5408\u689d\u4ef6\u7684\u5b78\u54e1</p></div>';}
   else{
     h+='<div class="dept-grid" style="'+(deptF?'grid-template-columns:1fr':'')+'">';
@@ -274,13 +296,17 @@ function renderTable(el){
   ds.forEach(function(d){h+='<th style="text-align:center">'+escHtml(d)+'</th>';});
   h+='<th style="text-align:center;background:#e8f0fe;color:#1d4ed8">\u5408\u8a08</th></tr></thead><tbody>';
   var dT={};ds.forEach(function(d){dT[d]=0;});var gT=0;
-  W.forEach(function(w){var d=w[1],rT=0;var rh='<tr><td style="font-weight:600;white-space:nowrap">'+escHtml(w[0])+'</td>';
+  W.forEach(function(w,wi){if(mIdx!==-1&&WM[wi]!==mIdx)return;var d=w[1],rT=0;var rh='<tr><td style="font-weight:600;white-space:nowrap">'+escHtml(w[0])+'</td>';
     ds.forEach(function(dd){var ids=(d[dd]||[]).filter(matchSearch);var c=ids.length;rT+=c;dT[dd]+=c;
       if(c>0){var nm=ids.map(function(i){return S[i].n+'('+S[i].s+') ['+S[i].c+']';}).join('\n');rh+='<td class="count-cell has-tip">'+c+'<div class="tip">'+escHtml(nm).replace(/\n/g,'<br>')+'</div></td>';}
       else{rh+='<td class="count-cell count-zero">-</td>';}});
     gT+=rT;rh+='<td class="count-cell" style="background:#f0f5ff;font-weight:800">'+rT+'</td></tr>';h+=rh;});
   h+='<tr class="total-row"><td>\u5408\u8a08</td>';ds.forEach(function(d){h+='<td class="count-cell">'+dT[d]+'</td>';});
-  h+='<td class="count-cell" style="color:#1d4ed8;font-size:15px">'+gT+'</td></tr></tbody></table></div>';
+  h+='<td class="count-cell" style="color:#1d4ed8;font-size:15px">'+gT+'</td></tr>';
+  if(mIdx!==-1){var md=getMonthMerged(mIdx),mT=0;h+='<tr class="total-row"><td>'+escHtml(MS[mIdx].label)+'\u65b0\u5831\u5230\u4eba\u6578</td>';
+    ds.forEach(function(d){var c=(md[d]||[]).filter(function(si){return matchSearch(si)&&isMonthArrival(si,d,mIdx);}).length;mT+=c;h+='<td class="count-cell'+(c?'':' count-zero')+'">'+(c||'-')+'</td>';});
+    h+='<td class="count-cell" style="color:#1d4ed8;font-size:15px">'+mT+'</td></tr>';}
+  h+='</tbody></table></div>';
   el.innerHTML=h;
 }
 
